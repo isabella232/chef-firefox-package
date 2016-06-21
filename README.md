@@ -38,17 +38,17 @@ for multiple platforms.
 Install the latest version of Firefox.
 
 ```ruby
-firefox_package 'latest'
+firefox_package 'firefox-latest'
 ```
 
 Configure a 24 hour splay to reduce egress HTTPS requests to Mozilla servers.
 ```ruby
-firefox_package 'latest-esr' do
+firefox_package 'firefox-esr-latest' do
   splay 84600
 end
 ```
 
-* `version`   - Version of Firefox to install. Named versions, such as `latest`, `latest-esr`, `latest-prior-esr`, `latest-beta` are all valid. *(name_attribute)*
+* `version`   - Version of Firefox to install. Named versions, such as `firefox-latest`, `firefox-esr-latest`  are all valid. *(name_attribute)*
 * `checksum`  - SHA256 Checksum of the file. Not required.
 * `uri`       - HTTPS uri to obtain the installer/archive. Defaults to: `https://download-installer.cdn.mozilla.net/pub/firefox/releases`
 * `language`  - Language desired. Defaults to: `en-US`

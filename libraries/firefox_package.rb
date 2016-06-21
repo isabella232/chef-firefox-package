@@ -74,7 +74,11 @@ module FirefoxPackage
     def munged_platform
       case new_resource.platform.to_s
       when 'x86_64-linux', 'linux'
-        @munged_platform = 'linux-x86_64'
+        if esr?(new_resource.version) or latest?(new_resource.version)
+          @munged_platform = 'linux64'
+        else
+          @munged_platform = 'linux-x86_64'
+        end
       when 'i386-mingw32', 'windows'
         @munged_platform = 'win32'
       when 'darwin', /^universal.x86_64-darwin\d{2}$/
@@ -147,6 +151,17 @@ module FirefoxPackage
         end
       else
         long_version = version
+      end
+    end
+
+    # Determines if the version is a latest version.
+    # @param [String]
+    # @return [Boolean]
+    def latest?(filename)
+      if filename =~ /latest/
+        true
+      else
+        false
       end
     end
 
@@ -233,12 +248,19 @@ module FirefoxPackage
       require 'uri'
 
       platform = munged_platform
-      download_uri = "#{new_resource.uri}/#{new_resource.version}/#{platform}/#{new_resource.language}/"
-      filename = requested_version_filename(download_uri)
+      # If the version contains ESR or latest, handle it accordingly
+      if esr?(new_resource.version) or latest?(new_resource.version)
+        download_uri = "https://download.mozilla.org/?product=#{new_resource.version}&os=#{platform}&lang=#{new_resource.language}"
+        filename = new_resource.version
+      else
+        download_uri = "#{new_resource.uri}/#{new_resource.version}/#{platform}/#{new_resource.language}/"
+        filename = requested_version_filename(download_uri)
+        download_uri = download_uri + filename
+      end
       cached_file = ::File.join(Chef::Config[:file_cache_path], filename)
 
       remote_file cached_file do
-        source URI.encode("#{download_uri}#{filename}").to_s
+        source URI.encode("#{download_uri}").to_s
         checksum new_resource.checksum unless new_resource.checksum.nil?
         action :create
       end
