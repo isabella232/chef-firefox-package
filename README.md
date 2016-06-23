@@ -35,7 +35,8 @@ for multiple platforms.
 
 ### firefox_package
 
-Install the latest version of Firefox.
+Install the latest version of Firefox via the Mozilla Firefox download API:
+* https://download-installer.cdn.mozilla.net/pub/firefox/releases/latest/README.txt
 
 ```ruby
 firefox_package 'firefox-latest'
@@ -48,9 +49,9 @@ firefox_package 'firefox-esr-latest' do
 end
 ```
 
-* `version`   - Version of Firefox to install. Named versions, such as `firefox-latest`, `firefox-esr-latest`  are all valid. *(name_attribute)*
+* `version`   - Version of Firefox to install. Named versions, such as `firefox-latest`, `firefox-esr-latest`, `firefox-38.0`  are all valid. *(name_attribute)*
 * `checksum`  - SHA256 Checksum of the file. Not required.
-* `uri`       - HTTPS uri to obtain the installer/archive. Defaults to: `https://download-installer.cdn.mozilla.net/pub/firefox/releases`
+* `uri`       - HTTPS uri to obtain the installer/archive. Defaults to: `https://download.mozilla.org`
 * `language`  - Language desired. Defaults to: `en-US`
 * `platform`  - Platform you wish to download and install. Defaults to the OS from which Chef is running.
 * `path`      - Path to install Firefox. Linux Only, Defaults to: ```/opt/firefox/#{version}_#{language}```

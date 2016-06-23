@@ -4,7 +4,7 @@ include_recipe 'apt' if platform_family?('debian')
 {
   'firefox-esr-latest' => [ '/usr/bin/firefox-esr-latest' ],
   'firefox-latest' => [ '/usr/bin/firefox-latest' ],
-  '37.0' => [ '/usr/bin/firefox-37.0' ]
+  'firefox-37.0' => [ '/usr/bin/firefox-37.0' ]
 }.map do |version, linkto|
   firefox_package version do
     link linkto
@@ -16,10 +16,10 @@ end
 # There has to be a better way to copy directories... but it is not obvious.
 unless platform?('windows')
   execute "copy-version" do
-    command 'cp -a /opt/firefox/37.0_en-US /opt/firefox/38.0_en-US'
+    command 'cp -a /opt/firefox/firefox-37.0_en-US /opt/firefox/firefox-38.0_en-US'
   end
 
-  firefox_package '38.0' do
+  firefox_package 'firefox-38.0' do
     action :upgrade
   end
 end

@@ -30,7 +30,7 @@ module FirefoxPackage
 
     attribute(:version, kind_of: String, name_attribute: true)
     attribute(:checksum, kind_of: String)
-    attribute(:uri, kind_of: String, default: 'https://download-installer.cdn.mozilla.net/pub/firefox/releases')
+    attribute(:uri, kind_of: String, default: 'https://download.mozilla.org')
     attribute(:language, kind_of: String, default: 'en-US')
     attribute(:platform, kind_of: String, default: lazy { node['os'] })
     attribute(:path, kind_of: String,
@@ -48,7 +48,7 @@ module FirefoxPackage
     provides(:firefox_package)
 
     def action_install
-      converge_by("installing Firefox #{new_resource.version} #{new_resource.language}") do
+      converge_by("installing #{new_resource.version} #{new_resource.language}") do
         notifying_block do
            install_package
         end
@@ -64,7 +64,7 @@ module FirefoxPackage
     end
 
     def action_remove
-      converge_by("removing Firefox #{new_resource.version}") do
+      converge_by("removing #{new_resource.version}") do
         notifying_block do
           remove_package
         end
@@ -72,25 +72,21 @@ module FirefoxPackage
     end
 
     def munged_platform
+      arch = node['kernel']['machine']
       case new_resource.platform.to_s
-      when 'x86_64-linux', 'linux'
-        if esr?(new_resource.version) or latest?(new_resource.version)
-          @munged_platform = 'linux64'
-        else
-          @munged_platform = 'linux-x86_64'
-        end
-      when 'i386-mingw32', 'windows'
-        @munged_platform = 'win32'
+      when 'linux'
+        (arch == 'x86_64') ? @munged_platform = 'linux64' : @munged_platform = 'linux'
+      when 'windows'
+        (arch == 'x86_64') ? @munged_platform = 'win64' :  @munged_platform = 'win'
       when 'darwin', /^universal.x86_64-darwin\d{2}$/
-        @munged_platform = 'mac'
+        @munged_platform = 'osx'
       else
         @munged_platform = new_resource.platform
       end
     end
 
     # Explodes tarballs into a path stripping the top level directory from
-    # the tarball. This has a not_if guard which prevents exploding when a
-    # pre-existing version is on disk and is the same or newer.
+    # the tarball.
     # @param [String] Full path to tarball to extract.
     # @param [String] Destination path to explode tarball.
     def explode_tarball(filename, dest_path)
@@ -100,11 +96,6 @@ module FirefoxPackage
 
       execute 'untar-firefox' do
         command "tar --strip-components=1 -xjf #{filename} -C #{dest_path}"
-        not_if {
-          installed_version(
-            ::File.join(dest_path, 'firefox')
-          ) >= parse_version(filename)
-        }
       end
     end
 
@@ -193,54 +184,11 @@ module FirefoxPackage
       end
     end
 
-    def requested_version_filename(download_uri)
-      unless platform_family?('windows')
-        include_recipe 'build-essential::default'
-      end
-
-      chef_gem 'oga' do
-        compile_time true
-      end
-
-      require 'net/http'
-      require 'oga'
-      require 'digest/sha1'
-
-      uri = URI.parse(download_uri)
-      # Mozilla uses an object store which seems to expect trailing slashes
-      # to requrest a file index.
-      uri.path = "#{uri.path}/" unless uri.path.end_with?('/')
-      http = Net::HTTP.new(uri.host, uri.port)
-      if uri.port == 443
-        http.use_ssl = true
-        http.ssl_version = :TLSv1
-        http.ca_file = Chef::Config[:ssl_ca_file] if Chef::Config[:ssl_ca_file]
-        http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-      end
-
-      cached_filename = ::File.join(Chef::Config[:file_cache_path], ::Digest::SHA1.hexdigest(download_uri))
-
-      if ::File.exist?(cached_filename) && ::File.mtime(cached_filename) > Time.now - new_resource.splay && ! ::File.zero?(cached_filename)
-        ::File.read(cached_filename)
+    def file_type(platform)
+      if platform.include? 'win'
+        '.exe'
       else
-        request = Net::HTTP::Get.new(uri.request_uri)
-        response = http.request(request)
-        raise response.error! if response.code.to_i >= 400
-        doc = Oga.parse_html(response.body)
-        remote_filename = doc.xpath('//tr/td/descendant::*/text()').to_a.delete_if { |element|
-          element.text.match('Stub') || element.text.match('\.\.')
-        }.last.text
-
-        if doc.nil? || remote_filename.empty?
-          raise StandardError, "The server #{uri.host} responded from #{uri.path} with an unexpected document:\n #{response.body}"
-        else
-          converge_by("Updating Firefox filename cache: #{cached_filename} with content: #{remote_filename}") do
-            file cached_filename do
-              content remote_filename
-            end
-          end
-        end
-        remote_filename
+        '.tar.bz2'
       end
     end
 
@@ -248,49 +196,56 @@ module FirefoxPackage
       require 'uri'
 
       platform = munged_platform
-      # If the version contains ESR or latest, handle it accordingly
-      if esr?(new_resource.version) or latest?(new_resource.version)
-        download_uri = "https://download.mozilla.org/?product=#{new_resource.version}&os=#{platform}&lang=#{new_resource.language}"
-        filename = new_resource.version
-      else
-        download_uri = "#{new_resource.uri}/#{new_resource.version}/#{platform}/#{new_resource.language}/"
-        filename = requested_version_filename(download_uri)
-        download_uri = download_uri + filename
-      end
+      download_uri = "#{new_resource.uri}/?product=#{new_resource.version}&os=#{platform}&lang=#{new_resource.language}"
+      filename = new_resource.version + file_type(platform)
       cached_file = ::File.join(Chef::Config[:file_cache_path], filename)
 
-      remote_file cached_file do
-        source URI.encode("#{download_uri}").to_s
-        checksum new_resource.checksum unless new_resource.checksum.nil?
-        action :create
+      # Splay guard
+      unless (::File.exist?(cached_file) && ::File.mtime(cached_file) > Time.now - new_resource.splay && ! ::File.zero?(cached_file))
+        remote_file cached_file do
+          source URI.encode("#{download_uri}").to_s
+          checksum new_resource.checksum unless new_resource.checksum.nil?
+          action :create
+          notifies :run, 'ruby_block[install-firefox]', :immediately
+        end
+
+        # Update file modification time to allow splay checking
+        FileUtils.touch cached_file
       end
 
-      if platform == 'win32'
-        windows_installer(cached_file, new_resource.version,
-                          new_resource.language, :install)
-      else
-        package %w{libasound2 libgtk2.0-0 libdbus-glib-1-2 libxt6}
-
-        explode_tarball(cached_file, new_resource.path)
-        node.set['firefox_package']['firefox']["#{new_resource.version}"]["#{new_resource.language}"] = new_resource.path.to_s
-        unless new_resource.link.nil?
-          if new_resource.link.is_a?(Array)
-            new_resource.link.each do |i|
-              link i do
-                to ::File.join(new_resource.path, 'firefox').to_s
-              end
-            end
+      # Do the install if we downloaded a new file
+      ruby_block 'install-firefox' do
+        block do
+          if platform.include? 'win'
+            windows_installer(cached_file, new_resource.version,
+                              new_resource.language, :install)
           else
-            link new_resource.link do
-              to ::File.join(new_resource.path, 'firefox').to_s
+            package %w{libasound2 libgtk2.0-0 libdbus-glib-1-2 libxt6}
+
+            explode_tarball(cached_file, new_resource.path)
+            node.set['firefox_package']['firefox']["#{new_resource.version}"]["#{new_resource.language}"] = new_resource.path.to_s
+            unless new_resource.link.nil?
+              if new_resource.link.is_a?(Array)
+                new_resource.link.each do |i|
+                  link i do
+                    to ::File.join(new_resource.path, 'firefox').to_s
+                  end
+                end
+              else
+                link new_resource.link do
+                  to ::File.join(new_resource.path, 'firefox').to_s
+                end
+              end
             end
           end
         end
+        action :nothing
       end
+
     end
 
     def remove_package
-      if munged_platform == 'win32'
+      if munged_platform.include? 'win'
         windows_installer(nil, new_resource.version,
                           new_resource.language, :remove)
       else
