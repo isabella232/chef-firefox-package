@@ -220,7 +220,7 @@ module FirefoxPackage
             windows_installer(cached_file, new_resource.version,
                               new_resource.language, :install)
           else
-            package %w{libasound2 libgtk2.0-0 libdbus-glib-1-2 libxt6}
+            package %w{libasound2 libgtk2.0-0 libgtk-3-0 libdbus-glib-1-2 libxt6 libx11-xcb-dev}
 
             explode_tarball(cached_file, new_resource.path)
             node.set['firefox_package']['firefox']["#{new_resource.version}"]["#{new_resource.language}"] = new_resource.path.to_s
