@@ -38,7 +38,7 @@ module FirefoxPackage
     attribute(:splay, kind_of: Integer, default: 0)
     attribute(:link, kind_of: [String, Array, NilClass])
     attribute(:windows_ini_source, kind_of: String, default: 'windows_ini_source')
-    attribute(:windows_ini_content, kind_of: String, default: lazy { { :install_path => self.path } })
+    attribute(:windows_ini_content, kind_of: String, default: lazy {self.path})
     attribute(:windows_ini_cookbook, kind_of: String, default: 'firefox_package')
   end
 
@@ -172,7 +172,7 @@ module FirefoxPackage
 
       template rendered_ini do
         source new_resource.windows_ini_source
-        variables new_resource.windows_ini_content
+        variables({ :install_path => new_resource.windows_ini_content })
         cookbook new_resource.windows_ini_cookbook
       end
 
@@ -223,7 +223,7 @@ module FirefoxPackage
             package %w{libasound2 libgtk2.0-0 libgtk-3-0 libdbus-glib-1-2 libxt6 libx11-xcb-dev}
 
             explode_tarball(cached_file, new_resource.path)
-            node.set['firefox_package']['firefox']["#{new_resource.version}"]["#{new_resource.language}"] = new_resource.path.to_s
+            node.normal['firefox_package']['firefox']["#{new_resource.version}"]["#{new_resource.language}"] = new_resource.path.to_s
             unless new_resource.link.nil?
               if new_resource.link.is_a?(Array)
                 new_resource.link.each do |i|
